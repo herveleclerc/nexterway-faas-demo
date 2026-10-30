@@ -1,0 +1,7 @@
+functions:
+  - name: greeting
+    runtime: nodejs
+    path: /api/greeting
+    method: GET
+    timeout: 30
+    file: src/hello.js
