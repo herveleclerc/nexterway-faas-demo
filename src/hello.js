@@ -5,7 +5,7 @@ export default async function(context) {
         status: 200,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            message: `Hello ${name} from Fission FaaS!`,
+            message: `Hello ${name} from Fission FaaS from NexterWay!`,
             timestamp: new Date().toISOString()
         }) + "\n"
     };
