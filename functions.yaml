@@ -4,4 +4,11 @@ functions:
     path: /api/greeting
     method: GET
     timeout: 30
-    file: src/hello.js
+    file: src/js/hello.js
+
+  - name: system-status
+    runtime: python
+    path: /api/status
+    method: GET
+    timeout: 30
+    file: src/python/status.py
