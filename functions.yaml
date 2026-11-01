@@ -12,3 +12,17 @@ functions:
     method: GET
     timeout: 30
     file: src/python/status.py
+
+  - name: hello-go
+    runtime: go
+    path: /api/go
+    method: GET
+    timeout: 30
+    file: src/go/handler.go
+
+  - name: hello-rust
+    runtime: rust
+    path: /api/rust
+    method: GET
+    timeout: 30
+    file: src/rust/handler.rs
