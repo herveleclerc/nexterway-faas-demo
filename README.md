@@ -355,3 +355,4 @@ curl -k "https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/order?quantity=12"
 1. **Ne pas versionner de secrets en dur** : Ne stockez jamais vos cles d'API ou jetons de production dans les fichiers sources ou dans Git. Utilisez les variables d'environnement alimentees par des `Secrets` Kubernetes.
 2. **Cloisonnement reseau natif** : Le reseau Kubernetes du tenant est protege par les `NetworkPolicies` Nexterway. Aucun autre tenant ne peut emettre de requetes directes vers vos pods de fonctions.
 3. **Timeouts et resilience** : Definissez toujours des valeurs de `timeout` raisonnables dans vos appels `urllib` ou `requests` (ex. 5 a 10 secondes) pour eviter de bloquer les pools de conteneurs Fission en cas de lenteur applicative.
+
