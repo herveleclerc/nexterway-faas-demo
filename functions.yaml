@@ -26,3 +26,28 @@ functions:
     method: GET
     timeout: 30
     file: src/rust/handler.rs
+
+  # ── Exemples de securite ──────────────────────────────────────────────────
+  # Exemple 1 : Fonction protegee par cle API externe (X-API-Key)
+  - name: secure-vault
+    runtime: python
+    path: /api/secure-vault
+    method: GET
+    timeout: 30
+    file: src/python/secure_vault.py
+
+  # Exemple 2 : Service interne protege par token de service (X-Internal-Token)
+  - name: internal-compute
+    runtime: python
+    path: /api/internal-compute
+    method: GET
+    timeout: 30
+    file: src/python/internal_compute.py
+
+  # Exemple 3 : Orchestrateur appelant le service interne de facon securisee
+  - name: order-processor
+    runtime: python
+    path: /api/order
+    method: GET
+    timeout: 30
+    file: src/python/order_processor.py
