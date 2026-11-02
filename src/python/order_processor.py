@@ -35,3 +35,4 @@ def main():
         "summary": "Commande traitee avec calcul interne securise",
         "computation": calc_data
     }), 200
+

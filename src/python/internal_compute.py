@@ -29,3 +29,4 @@ def main():
         "processed_by_pod": os.getenv("HOSTNAME", "unknown-pod")
     }
     return jsonify(result), 200
+
