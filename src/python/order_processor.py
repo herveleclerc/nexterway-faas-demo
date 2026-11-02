@@ -5,7 +5,7 @@ from flask import request, jsonify
 
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "nexterway-internal-token-xyz")
 ROUTER_URL = os.getenv("FISSION_ROUTER_URL", "http://router.fission")
-TENANT_HOST = os.getenv("TENANT_HOST", "wy-3a1fd37f-1-0-0.nexterway.caas.fr")
+TENANT_HOST = os.getenv("TENANT_HOST", "my-instance.nexterway.caas.fr")
 
 
 def main():

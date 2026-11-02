@@ -199,13 +199,13 @@ def main():
 ### Validation
 - **Sans la cle API** (Refus immediat) :
   ```bash
-  curl -i -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/secure-vault
+  curl -i -k https://my-instance.nexterway.caas.fr/api/secure-vault
   # HTTP/2 401 Unauthorized
   ```
 - **Avec la cle valide** (Succes) :
   ```bash
   curl -i -k -H "X-API-Key: nexterway-secret-key-2026" \
-    https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/secure-vault
+    https://my-instance.nexterway.caas.fr/api/secure-vault
   # HTTP/2 200 OK
   ```
 
@@ -278,7 +278,7 @@ from flask import request, jsonify
 
 INTERNAL_SERVICE_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN", "nexterway-internal-token-xyz")
 ROUTER_URL = os.getenv("FISSION_ROUTER_URL", "http://router.fission")
-TENANT_HOST = os.getenv("TENANT_HOST", "wy-3a1fd37f-1-0-0.nexterway.caas.fr")
+TENANT_HOST = os.getenv("TENANT_HOST", "my-instance.nexterway.caas.fr")
 
 def main():
     qty = request.args.get("quantity", "5")
@@ -305,12 +305,12 @@ def main():
 ### Validation
 1. **Tentative d'appel direct du service interne par un tiers** :
    ```bash
-   curl -i -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/internal-compute
+   curl -i -k https://my-instance.nexterway.caas.fr/api/internal-compute
    # HTTP/2 401 Unauthorized
    ```
 2. **Appel nominal via l'orchestrateur** :
    ```bash
-   curl -i -k "https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/order?quantity=8"
+   curl -i -k "https://my-instance.nexterway.caas.fr/api/order?quantity=8"
    # HTTP/2 200 OK
    # Le calcul (square: 64, cube: 512) est retourne de maniere transparente !
    ```
@@ -323,29 +323,29 @@ Voici l'ensemble des commandes pour verifier les 7 fonctions actives du depot :
 
 ```bash
 # 1. Node.js
-curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/greeting
+curl -k https://my-instance.nexterway.caas.fr/api/greeting
 
 # 2. Python avec psutil & requests
-curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/status
+curl -k https://my-instance.nexterway.caas.fr/api/status
 
 # 3. Go compile
-curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/go
+curl -k https://my-instance.nexterway.caas.fr/api/go
 
 # 4. Rust compile avec Axum
-curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/rust
+curl -k https://my-instance.nexterway.caas.fr/api/rust
 
 # 5. Protection par cle API (echec sans cle)
-curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/secure-vault
+curl -k https://my-instance.nexterway.caas.fr/api/secure-vault
 
 # 6. Protection par cle API (succes avec cle)
 curl -k -H "X-API-Key: nexterway-secret-key-2026" \
-  https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/secure-vault
+  https://my-instance.nexterway.caas.fr/api/secure-vault
 
 # 7. Service interne direct (rejet 401)
-curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/internal-compute
+curl -k https://my-instance.nexterway.caas.fr/api/internal-compute
 
 # 8. Chaine complete securisee via Orchestrateur
-curl -k "https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/order?quantity=12"
+curl -k "https://my-instance.nexterway.caas.fr/api/order?quantity=12"
 ```
 
 ---
