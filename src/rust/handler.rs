@@ -12,3 +12,4 @@ pub async fn handler() -> impl IntoResponse {
         "os": std::env::consts::OS
     }))
 }
+
