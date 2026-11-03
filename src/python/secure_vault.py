@@ -19,6 +19,9 @@ def main():
             "message": "Acces refuse : cle API invalide ou absente (entete X-API-Key requis)"
         }), 401
 
+    key_len = len(EXPECTED_API_KEY)
+    fingerprint = (EXPECTED_API_KEY[:4] + "..." + EXPECTED_API_KEY[-4:]) if key_len > 8 else "***"
+
     return jsonify({
         "status": "success",
         "code": 200,
@@ -26,8 +29,9 @@ def main():
         "data": {
             "vault_item": "top-secret-credentials-alpha",
             "environment": os.getenv("ENVIRONMENT", "production"),
+            "secret_source": "gitops-encrypted-secret" if os.getenv("API_KEY") else "fallback-default",
+            "key_fingerprint": fingerprint,
             "caller_ip": request.remote_addr,
             "method": request.method
         }
     }), 200
-

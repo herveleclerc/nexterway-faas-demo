@@ -20,13 +20,17 @@ def main():
     except ValueError:
         num = 10
 
+    tok_len = len(INTERNAL_SERVICE_TOKEN)
+    fingerprint = (INTERNAL_SERVICE_TOKEN[:4] + "..." + INTERNAL_SERVICE_TOKEN[-4:]) if tok_len > 8 else "***"
+
     result = {
         "service": "internal-compute",
         "status": "computed",
         "input_value": num,
         "square": num * num,
         "cube": num * num * num,
+        "token_source": "gitops-encrypted-secret" if os.getenv("INTERNAL_SERVICE_TOKEN") else "fallback-default",
+        "token_fingerprint": fingerprint,
         "processed_by_pod": os.getenv("HOSTNAME", "unknown-pod")
     }
     return jsonify(result), 200
-
