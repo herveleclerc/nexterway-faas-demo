@@ -54,8 +54,7 @@ def analyze_contact(partner_id, name, email, phone):
 
 
 def main():
-    """Point d'entree FaaS Fission pour les webhooks/appels Odoo (POST /api/odoo)."""
-    # Verification du payload JSON
+    """Point d'entree FaaS Fission adapté au format Webhook d'Odoo (POST /api/odoo)."""
     payload = request.get_json(silent=True)
     if not payload:
         return jsonify({
@@ -64,12 +63,27 @@ def main():
             "message": "Corps de requete JSON invalide ou absent"
         }), 400
 
-    partner_id = payload.get("partner_id")
-    name = payload.get("name")
-    email = payload.get("email")
-    phone = payload.get("phone")
+    # --- AJUSTEMENT WEBHOOK ODOO NATIF ---
+    # Le Webhook Odoo encapsule l'objet dans une liste sous la clé 'data'
+    records = payload.get("data", [])
+    if not records:
+        return jsonify({
+            "status": "error",
+            "code": 400,
+            "message": "Aucune donnée trouvée dans la clé 'data' du Webhook Odoo"
+        }), 400
+    
+    # On extrait le premier enregistrement envoyé (john doe)
+    contact_data = records[0]
 
-    # Traitement métier & enrichissement
+    # Le Webhook natif utilise directement la clé 'id' pour l'ID de la table
+    partner_id = contact_data.get("id")
+    name = contact_data.get("name")
+    email = contact_data.get("email")
+    phone = contact_data.get("phone")
+    # -------------------------------------
+
+    # Traitement métier & enrichissement (inchangé)
     contact_analysis = analyze_contact(partner_id, name, email, phone)
 
     tracking_id = f"odoo-sync-{uuid.uuid4().hex[:12]}"
@@ -84,4 +98,3 @@ def main():
         "processed_by_pod": os.getenv("HOSTNAME", "local"),
         "contact": contact_analysis
     }), 200
-
