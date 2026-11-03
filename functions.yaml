@@ -51,3 +51,11 @@ functions:
     method: GET
     timeout: 30
     file: src/python/order_processor.py
+
+  # ── Integration Odoo ───────────────────────────────────────────────────────
+  - name: odoo-contact
+    runtime: python
+    path: /api/odoo
+    method: POST
+    timeout: 30
+    file: src/python/odoo_contact.py
