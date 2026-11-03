@@ -1,0 +1,10 @@
+[package]
+name = "rust-encrypt"
+version = "0.1.0"
+edition = "2021"
+description = "Outil CLI de chiffrement de secrets Nexterway FaaS en Rust"
+
+[dependencies]
+aes-gcm = "0.10"
+base64 = "0.22"
+rand = "0.8"

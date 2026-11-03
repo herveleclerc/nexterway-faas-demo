@@ -148,3 +148,8 @@ vite.config.ts.timestamp-*
 # Turbo Repo
 .turbo
 .backups/
+
+# Rust target
+target/
+**/*.rs.bk
+

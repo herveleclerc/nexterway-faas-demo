@@ -382,16 +382,41 @@ flowchart TD
 
 ### Etape 2 : Chiffrer vos variables sensibles en local
 
-Utilisez le script fourni dans le dossier `tools/` (disponible en Python ou en Node.js) :
+Vous pouvez utiliser indifferemment l'un des 4 outils polyglottes fournis dans le dossier `tools/` (100% compatibles AES-256-GCM) :
 
+#### Option A : En Go (Standard Library, zero dependance externe)
 ```bash
-# Avec l'outil Python (necessite cryptography et pyyaml) :
+# Ajouter ou mettre a jour une cle dans secrets.enc.yaml :
+go run tools/encrypt.go -key "$NEXTERWAY_TENANT_KEY" -set-key API_KEY -set-val "nexterway-vault-prod-key-2026"
+go run tools/encrypt.go -key "$NEXTERWAY_TENANT_KEY" -set-key INTERNAL_SERVICE_TOKEN -set-val "nexterway-token-internal-999"
+
+# Verifier et afficher tous les secrets dechiffres :
+go run tools/encrypt.go -key "$NEXTERWAY_TENANT_KEY" -view
+```
+
+#### Option B : En Rust (Cargo)
+```bash
+# Ajouter ou mettre a jour une cle :
+cargo run --manifest-path tools/rust-encrypt/Cargo.toml -- --key "$NEXTERWAY_TENANT_KEY" --set API_KEY "nexterway-vault-prod-key-2026"
+cargo run --manifest-path tools/rust-encrypt/Cargo.toml -- --key "$NEXTERWAY_TENANT_KEY" --set INTERNAL_SERVICE_TOKEN "nexterway-token-internal-999"
+
+# Verifier et afficher tous les secrets dechiffres :
+cargo run --manifest-path tools/rust-encrypt/Cargo.toml -- --key "$NEXTERWAY_TENANT_KEY" --view
+```
+
+#### Option C : En Python (CLI complet)
+```bash
+# Chiffrer et enregistrer directement :
 python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --set API_KEY "nexterway-vault-prod-key-2026"
 python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --set INTERNAL_SERVICE_TOKEN "nexterway-token-internal-999"
-python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --set DATABASE_URL "postgresql://user:pass@cluster:5432/db"
 
-# Pour verifier vos secrets en local :
+# Afficher les secrets dechiffres :
 python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --view
+```
+
+#### Option D : En Node.js (CLI rapide)
+```bash
+node tools/encrypt.js --key "$NEXTERWAY_TENANT_KEY" --encrypt "ma-cle-secrete"
 ```
 
 Le fichier `secrets.enc.yaml` genere contient uniquement des donnees chiffrees (`enc:v1:...`) :

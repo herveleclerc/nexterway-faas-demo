@@ -55,3 +55,4 @@ if (args.includes('--encrypt')) {
 } else {
   console.log('Usage: node tools/encrypt.js --key <CLE> [--encrypt <VALEUR> | --decrypt <PAYLOAD>]');
 }
+
