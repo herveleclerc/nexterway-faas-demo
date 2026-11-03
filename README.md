@@ -337,22 +337,99 @@ curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/rust
 # 5. Protection par cle API (echec sans cle)
 curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/secure-vault
 
-# 6. Protection par cle API (succes avec cle)
-curl -k -H "X-API-Key: nexterway-secret-key-2026" \
+# 6. Protection par cle API externe (succes avec cle dechiffree)
+curl -k -H "X-API-Key: nexterway-vault-prod-key-2026" \
   https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/secure-vault
 
-# 7. Service interne direct (rejet 401)
+# 7. Service interne direct (rejet 401 si jeton absent ou perime)
 curl -k https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/internal-compute
 
-# 8. Chaine complete securisee via Orchestrateur
+# 8. Service interne direct avec jeton dechiffre valide
+curl -k -H "X-Internal-Token: nexterway-token-internal-999" \
+  "https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/internal-compute?value=15"
+
+# 9. Chaine complete securisee via Orchestrateur (calcul interne)
 curl -k "https://wy-3a1fd37f-1-0-0.nexterway.caas.fr/api/order?quantity=12"
 ```
 
 ---
 
-## 8. Bonnes Pratiques de Production
+## 8. Gestion Securisee des Secrets et Variables d'Environnement (GitOps)
 
-1. **Ne pas versionner de secrets en dur** : Ne stockez jamais vos cles d'API ou jetons de production dans les fichiers sources ou dans Git. Utilisez les variables d'environnement alimentees par des `Secrets` Kubernetes.
+En environnement SaaS multi-tenant Nexterway, les utilisateurs n'ont aucun acces `kubectl` direct au cluster Kubernetes. Il est formellement interdit de versionner des secrets en clair dans Git.
+
+Pour resoudre cette contrainte, Nexterway FaaS met en oeuvre une solution **100% GitOps a chiffrement asymetrique/tenant** :
+
+```mermaid
+flowchart TD
+    Portail["Portail Nexterway\n(Onglet Informations / Secrets)"] -->|"Copier la cle privee du tenant\n(ex: NEXTERWAY_TENANT_KEY)"| Dev["Developpeur en local"]
+    Dev -->|"tools/encrypt.py --set API_KEY ..."| EncFile["secrets.enc.yaml\n(Chiffre en AES-256-GCM)"]
+    EncFile -->|"git push"| Git["Depot Git Client"]
+    Git -->|"git pull"| GitSync["Pod faas-git-sync in-cluster"]
+    K8sKey["Secret K8s wy-xxx-tenant-key"] -->|"Dechiffrement en memoire"| GitSync
+    GitSync -->|"Cree / Met a jour"| K8sSecret["Secret K8s faas-secrets"]
+    K8sSecret -->|"envFrom (os.environ)"| Runtime["Pods de Fonctions Fission\nos.getenv('API_KEY')"]
+```
+
+### Etape 1 : Recuperer la cle de chiffrement du tenant
+
+1. Connectez-vous au portail Nexterway Client.
+2. Accedez a votre application FaaS > onglet **Informations (secrets)**.
+3. Copiez la valeur de la cle nommee `Cle de chiffrement GitOps FaaS` :
+   ```bash
+   export NEXTERWAY_TENANT_KEY="<votre-cle-32-octets>"
+   ```
+
+### Etape 2 : Chiffrer vos variables sensibles en local
+
+Utilisez le script fourni dans le dossier `tools/` (disponible en Python ou en Node.js) :
+
+```bash
+# Avec l'outil Python (necessite cryptography et pyyaml) :
+python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --set API_KEY "nexterway-vault-prod-key-2026"
+python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --set INTERNAL_SERVICE_TOKEN "nexterway-token-internal-999"
+python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --set DATABASE_URL "postgresql://user:pass@cluster:5432/db"
+
+# Pour verifier vos secrets en local :
+python3 tools/encrypt.py --key "$NEXTERWAY_TENANT_KEY" --view
+```
+
+Le fichier `secrets.enc.yaml` genere contient uniquement des donnees chiffrees (`enc:v1:...`) :
+```yaml
+version: 1
+secrets:
+  API_KEY: enc:v1:OR9pk7XO5i9Kz35DmP9GNcEiK+cCHlBPQT11+Bkat51ED/8Ku0Y5Ypq5PviNI48qoCpV0bqaGmF3
+  INTERNAL_SERVICE_TOKEN: enc:v1:om85EnRvMHMAO4ItmmmeS4+kSZx66Y2GDX8MAvijvEDqE+MsC88vi5DOYV+pwwocVC0nDJH/q2I=
+  DATABASE_URL: enc:v1:4Y9f4DiPUmiALClMGVlcpA57ulEQbAwmnfYUb6XY7P8dRqT8PrMwz6ikPsbASab7r0aSOhXZ/BEyL6Dwwcj+lTg3cuU4mCyP
+```
+
+### Etape 3 : Pousser dans Git
+
+```bash
+git add secrets.enc.yaml
+git commit -m "chore: update encrypted secrets"
+git push origin main
+```
+
+Le pod `faas-git-sync` detecte le commit, dechiffre les cles en memoire a l'aide du secret Kubernetes du tenant et met a jour le `Secret` Kubernetes `faas-secrets`.
+
+### Etape 4 : Consommation dans le code
+
+Vos variables sont automatiquement injectees dans `os.environ` par le runtime Fission :
+
+```python
+import os
+
+API_KEY = os.getenv("API_KEY")
+INTERNAL_TOKEN = os.getenv("INTERNAL_SERVICE_TOKEN")
+DATABASE_URL = os.getenv("DATABASE_URL")
+```
+
+---
+
+## 9. Bonnes Pratiques de Production
+
+1. **Ne jamais versionner de secrets en clair** : Utilisez systematiquement `secrets.enc.yaml` avec chiffrement AES-256-GCM.
 2. **Cloisonnement reseau natif** : Le reseau Kubernetes du tenant est protege par les `NetworkPolicies` Nexterway. Aucun autre tenant ne peut emettre de requetes directes vers vos pods de fonctions.
 3. **Timeouts et resilience** : Definissez toujours des valeurs de `timeout` raisonnables dans vos appels `urllib` ou `requests` (ex. 5 a 10 secondes) pour eviter de bloquer les pools de conteneurs Fission en cas de lenteur applicative.
 
