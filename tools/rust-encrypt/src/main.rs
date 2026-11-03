@@ -259,3 +259,4 @@ fn main() {
 
     print_help();
 }
+

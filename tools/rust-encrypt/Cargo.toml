@@ -8,3 +8,4 @@ description = "Outil CLI de chiffrement de secrets Nexterway FaaS en Rust"
 aes-gcm = "0.10"
 base64 = "0.22"
 rand = "0.8"
+
