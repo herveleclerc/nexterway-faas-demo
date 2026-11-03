@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime, timezone
-from flask import request, jsonify
+from flask import request, jsonify, current_app # Ajout de current_app
 
 PUBLIC_WEBMAILS = {
     "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
@@ -43,15 +43,22 @@ def analyze_contact(partner_id, name, email, phone):
     }
 
 def main():
-    """Point d'entree FaaS Fission pour Odoo 19."""
+    """Point d'entree FaaS Fission adapté au format direct d'Odoo 19 avec Logs Forcés."""
+    
+    # LOG DE DÉMARRAGE : S'affiche dès que la fonction reçoit le moindre octet
+    current_app.logger.info("=== [FAAS] REQUETE RECUE DEPUIS ODOO ===")
+
     payload = request.get_json(silent=True)
     if not payload:
+        current_app.logger.error("[FAAS] ECHEC : Le corps de la requête JSON est vide ou invalide")
         return jsonify({"status": "error", "code": 400, "message": "JSON manquant"}), 400
+
+    # LOG DU PAYLOAD : Pour voir exactement ce qu'Odoo a envoyé
+    current_app.logger.info(f"[FAAS] DONNEES BRUTES REÇUES : {payload}")
 
     partner_id = payload.get("id")
     name = payload.get("name")
     
-    # Odoo envoie 'false' (booléen) si le champ est vide
     email = payload.get("email")
     if email is False or email is None: email = ""
         
@@ -60,6 +67,9 @@ def main():
 
     # Exécution de la logique métier
     contact_analysis = analyze_contact(partner_id, name, email, phone)
+
+    # LOG DE SUCCÈS : Affiche le résultat de l'analyse dans votre terminal
+    current_app.logger.info(f"[FAAS] TRAITEMENT SUCCES -> Contact: {name} (ID: {partner_id}) - Score: {contact_analysis['profile_completeness_pct']}%")
 
     tracking_id = f"odoo-sync-{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
