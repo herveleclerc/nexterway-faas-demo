@@ -1,8 +1,8 @@
 package main
 
 import (
-	"database/sql"
 	cryptorand "crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -18,6 +18,11 @@ import (
 	"github.com/herveleclerc/nexterway-faas-demo/src/demo-complete/pkg/models"
 )
 
+var (
+	db   *sql.DB
+	dbMu sync.Mutex
+)
+
 // generateUUID génère un identifiant UUID v4 standard
 func generateUUID() string {
 	b := make([]byte, 16)
@@ -27,48 +32,97 @@ func generateUUID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
-var (
-	db     *sql.DB
-	dbOnce sync.Once
-	dbErr  error
-)
+// buildCandidateDSNs génère la liste ordonnée des DSNs possibles
+func buildCandidateDSNs() []string {
+	var candidates []string
 
-// initDB initialise la connexion au cluster PostgreSQL CloudNativePG
-func initDB() (*sql.DB, error) {
-	dbOnce.Do(func() {
-		dsn := os.Getenv("DATABASE_URL")
-		if dsn == "" {
-			host := os.Getenv("DB_HOST")
-			if host == "" {
-				// FQDN complet pointant vers le cluster PostgreSQL dans le namespace demo-fission-1
-				host = "pg-demo-rw.demo-fission-1.svc.cluster.local"
-			}
-			port := os.Getenv("DB_PORT")
-			if port == "" {
-				port = "5432"
-			}
-			user := os.Getenv("DB_USER")
-			if user == "" {
-				user = "taskuser"
-			}
-			password := os.Getenv("DB_PASSWORD")
-			dbname := os.Getenv("DB_NAME")
-			if dbname == "" {
-				dbname = "taskdb"
-			}
-			sslmode := os.Getenv("DB_SSLMODE")
-			if sslmode == "" {
-				sslmode = "prefer"
-			}
+	envDBURL := os.Getenv("DATABASE_URL")
+	port := os.Getenv("DB_PORT")
+	if port == "" {
+		port = "5432"
+	}
+	user := os.Getenv("DB_USER")
+	if user == "" {
+		user = "taskuser"
+	}
+	password := os.Getenv("DB_PASSWORD")
+	dbname := os.Getenv("DB_NAME")
+	if dbname == "" {
+		dbname = "taskdb"
+	}
+	sslmode := os.Getenv("DB_SSLMODE")
+	if sslmode == "" {
+		sslmode = "prefer"
+	}
 
-			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=5",
-				host, port, user, password, dbname, sslmode)
+	// 1. Si DATABASE_URL est fournie
+	if envDBURL != "" {
+		candidates = append(candidates, envDBURL)
+
+		// Si DATABASE_URL contient "pg-cluster", CloudNativePG crée en réalité le service <cluster>-rw
+		if strings.Contains(envDBURL, "pg-cluster") {
+			candidates = append(candidates,
+				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw"),
+				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.demo-fission-1.svc.cluster.local"),
+				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.wy-3a1fd37f-1-0-0.svc.cluster.local"),
+				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-demo-rw.demo-fission-1.svc.cluster.local"),
+			)
 		}
+	}
+
+	// 2. Si DB_HOST est explicitement spécifié
+	if explicitHost := os.Getenv("DB_HOST"); explicitHost != "" {
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=3",
+			explicitHost, port, user, password, dbname, sslmode)
+		candidates = append([]string{dsn}, candidates...)
+	}
+
+	// 3. Fallbacks standards pour CloudNativePG (services -rw créés par l'opérateur)
+	fallbackHosts := []string{
+		"pg-demo-rw.demo-fission-1.svc.cluster.local",
+		"pg-demo-rw",
+		"pg-cluster-rw.demo-fission-1.svc.cluster.local",
+		"pg-cluster-rw.wy-3a1fd37f-1-0-0.svc.cluster.local",
+		"pg-cluster-rw",
+	}
+
+	for _, h := range fallbackHosts {
+		candidates = append(candidates, fmt.Sprintf(
+			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=3",
+			h, port, user, password, dbname, sslmode,
+		))
+	}
+
+	return candidates
+}
+
+// initDB initialise et teste la connexion au cluster PostgreSQL CloudNativePG
+func initDB() (*sql.DB, error) {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	// Si déjà connecté et actif
+	if db != nil {
+		if err := db.Ping(); err == nil {
+			return db, nil
+		}
+		_ = db.Close()
+		db = nil
+	}
+
+	candidates := buildCandidateDSNs()
+	var lastErr error
+	var attempted []string
+
+	for _, dsn := range candidates {
+		// Masquage du mot de passe pour les logs
+		displayDSN := maskDSN(dsn)
+		attempted = append(attempted, displayDSN)
 
 		database, err := sql.Open("postgres", dsn)
 		if err != nil {
-			dbErr = fmt.Errorf("erreur open postgres: %w", err)
-			return
+			lastErr = err
+			continue
 		}
 
 		database.SetMaxOpenConns(10)
@@ -76,11 +130,15 @@ func initDB() (*sql.DB, error) {
 		database.SetConnMaxLifetime(5 * time.Minute)
 
 		if err := database.Ping(); err != nil {
-			dbErr = fmt.Errorf("ping postgres échoué: %w", err)
-			return
+			_ = database.Close()
+			lastErr = err
+			continue
 		}
 
-		// Création de la table idempotente si non déjà initialisée
+		// Connexion réussie !
+		log.Printf("[FISSION] Connexion PostgreSQL CloudNativePG établie avec succès via : %s", displayDSN)
+
+		// Création idempotente de la table des tâches
 		createTableSQL := `
 		CREATE TABLE IF NOT EXISTS tasks (
 			id VARCHAR(36) PRIMARY KEY,
@@ -96,21 +154,30 @@ func initDB() (*sql.DB, error) {
 		CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
 		`
 		if _, err := database.Exec(createTableSQL); err != nil {
-			log.Printf("[FISSION] Avertissement init table: %v", err)
+			log.Printf("[FISSION] Note init table: %v", err)
 		}
 
 		db = database
-		log.Printf("[FISSION] Connexion PostgreSQL CloudNativePG établie avec succès")
-	})
+		return db, nil
+	}
 
-	return db, dbErr
+	return nil, fmt.Errorf("aucune cible PostgreSQL joignable (Dernière erreur: %v). Cibles testées : %s",
+		lastErr, strings.Join(attempted, " | "))
+}
+
+func maskDSN(dsn string) string {
+	// Masque le password pour éviter d'exposer des secrets dans les logs
+	if idx := strings.Index(dsn, "password="); idx != -1 {
+		end := strings.Index(dsn[idx:], " ")
+		if end != -1 {
+			return dsn[:idx] + "password=***" + dsn[idx+end:]
+		}
+		return dsn[:idx] + "password=***"
+	}
+	return dsn
 }
 
 // Handler est le point d'entrée universel pour Fission
-// Il gère les actions :
-// - GET  /api/tasks          : Liste des tâches et métriques
-// - POST /api/tasks          : Création d'une nouvelle tâche
-// - POST /api/tasks/process  : Traitement asynchrone / métier d'une tâche
 func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -257,7 +324,6 @@ func handleCreateTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskID string) {
 	if taskID == "" {
-		// Tentative de lecture depuis le body JSON
 		var body map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		taskID = body["id"]
@@ -271,7 +337,6 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 		return
 	}
 
-	// 1. Passage en statut PROCESSING
 	res, err := db.Exec(`
 		UPDATE tasks
 		SET status = $1, updated_at = $2
@@ -294,7 +359,6 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 		return
 	}
 
-	// 2. Simulation d'un traitement FaaS (calcul, validation métier, enrichissement)
 	start := time.Now()
 	time.Sleep(time.Duration(100+rand.Intn(200)) * time.Millisecond)
 	duration := time.Since(start)
@@ -312,7 +376,6 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 	}
 	resultBytes, _ := json.Marshal(resultPayload)
 
-	// 3. Mise à jour finale en COMPLETED avec les résultats
 	_, err = db.Exec(`
 		UPDATE tasks
 		SET status = $1, result = $2, updated_at = $3
@@ -340,7 +403,6 @@ func sendJSON(w http.ResponseWriter, code int, resp models.TasksResponse) {
 }
 
 func main() {
-	// Permet également d'exécuter ce handler en binaire autonome pour les tests locaux
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8888"
