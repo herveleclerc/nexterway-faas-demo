@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -10,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -32,7 +33,7 @@ func loadConfig() Config {
 
 	routerURL := os.Getenv("FISSION_ROUTER_URL")
 	if routerURL == "" {
-		// Par défaut, service Fission Router interne dans le cluster
+		// Service Fission Router interne
 		routerURL = "http://router.fission"
 	}
 
@@ -56,7 +57,7 @@ func loadConfig() Config {
 
 func main() {
 	cfg := loadConfig()
-	log.Printf("Démarrage Frontend BFF Nexterway sur :%s (Fission Router: %s)", cfg.Port, cfg.RouterURL)
+	log.Printf("Démarrage Frontend BFF Nexterway sur :%s (Fission Router: %s, TenantHost: %s)", cfg.Port, cfg.RouterURL, cfg.TenantHost)
 
 	tmpl, err := template.ParseFS(web.Content, "templates/index.html")
 	if err != nil {
@@ -100,7 +101,6 @@ func main() {
 	})
 
 	// 4. Proxy BFF vers la fonction Fission /api/tasks
-	// Évite les problèmes de CORS navigateur et centralise les appels au FaaS interne
 	parsedRouterURL, err := url.Parse(cfg.RouterURL)
 	if err != nil {
 		log.Fatalf("URL Fission Router invalide: %v", err)
@@ -110,14 +110,31 @@ func main() {
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
-		// Si Fission router utilise le virtual host tenant
-		if cfg.TenantHost != "" && !strings.Contains(req.Host, "localhost") {
+		// Le routeur Fission exige le header Host du tenant pour faire correspondre le trigger HTTP !
+		if cfg.TenantHost != "" {
 			req.Host = cfg.TenantHost
+			req.Header.Set("Host", cfg.TenantHost)
 		}
 	}
 
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Printf("[PROXY ERROR] %s %s -> Fission Router (%s) échoué: %v", r.Method, r.URL.String(), cfg.RouterURL, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":  "error",
+			"code":    502,
+			"message": fmt.Sprintf("Erreur de connexion au routeur Fission (%s) : %v. Vérifiez que router.fission est joignable.", cfg.RouterURL, err),
+		})
+	}
+
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		log.Printf("[PROXY] Fission Router a répondu: HTTP %d pour %s %s", resp.StatusCode, resp.Request.Method, resp.Request.URL.Path)
+		return nil
+	}
+
 	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[PROXY] %s %s -> Fission Router (%s)", r.Method, r.URL.RequestURI(), cfg.RouterURL)
+		log.Printf("[PROXY INCOMING] %s %s (Host entrant: %s, Host transmis: %s)", r.Method, r.URL.RequestURI(), r.Host, cfg.TenantHost)
 		proxy.ServeHTTP(w, r)
 	})
 

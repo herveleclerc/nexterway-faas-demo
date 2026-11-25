@@ -3,9 +3,10 @@ IMAGE_TAG      ?= latest
 IMAGE_NAME     ?= herveleclerc/demo-frontend
 IMAGE_URI      := $(IMAGE_NAME):$(IMAGE_TAG)
 KUBECTL        ?= kubectl
-NAMESPACE      ?= default
+NAMESPACE          ?= demo-fission-1
+FISSION_NAMESPACE  ?= wy-3a1fd37f-1-0-0
 
-.PHONY: all help build test buildx docker-build docker-push deploy deploy-db undeploy status logs clean
+.PHONY: all help build test buildx docker-build docker-push deploy deploy-db sync-secret undeploy status logs clean
 
 all: build
 
@@ -52,7 +53,14 @@ deploy-db:
 
 deploy:
 	@echo "==> Déploiement complet via Kustomize dans le namespace $(NAMESPACE)..."
-	$(KUBECTL) apply -k k8s/ -n $(NAMESPACE)
+	$(KUBECTL) create namespace $(NAMESPACE) --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) apply -k k8s/
+	@echo "==> Synchronisation du secret PostgreSQL vers $(FISSION_NAMESPACE)..."
+	-@$(KUBECTL) get secret pg-demo-app -n $(NAMESPACE) -o json 2>/dev/null | jq '.metadata.namespace = "$(FISSION_NAMESPACE)"' | $(KUBECTL) apply -f - 2>/dev/null || true
+
+sync-secret:
+	@echo "==> Copie du secret pg-demo-app de $(NAMESPACE) vers $(FISSION_NAMESPACE)..."
+	$(KUBECTL) get secret pg-demo-app -n $(NAMESPACE) -o json | jq '.metadata.namespace = "$(FISSION_NAMESPACE)"' | $(KUBECTL) apply -f -
 
 undeploy:
 	@echo "==> Suppression des ressources déployées..."

@@ -40,7 +40,8 @@ func initDB() (*sql.DB, error) {
 		if dsn == "" {
 			host := os.Getenv("DB_HOST")
 			if host == "" {
-				host = "pg-demo-rw" // Service RW généré par CloudNativePG
+				// FQDN complet pointant vers le cluster PostgreSQL dans le namespace demo-fission-1
+				host = "pg-demo-rw.demo-fission-1.svc.cluster.local"
 			}
 			port := os.Getenv("DB_PORT")
 			if port == "" {
@@ -57,7 +58,7 @@ func initDB() (*sql.DB, error) {
 			}
 			sslmode := os.Getenv("DB_SSLMODE")
 			if sslmode == "" {
-				sslmode = "require"
+				sslmode = "prefer"
 			}
 
 			dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=5",

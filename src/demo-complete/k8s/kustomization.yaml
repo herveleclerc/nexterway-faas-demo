@@ -1,6 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: demo-fission-1
+
 resources:
   # Base de données PostgreSQL opérée par CloudNativePG (1 instance)
   - cnpg-cluster.yaml

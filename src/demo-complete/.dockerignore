@@ -1,0 +1,36 @@
+# Fichiers exclus du contexte de build Docker
+
+# Contrôle de version et méta-fichiers
+.git
+.gitignore
+.dockerignore
+README.md
+*.md
+
+# Manifests Kubernetes (non nécessaires à l'intérieur de l'image de runtime)
+k8s/
+
+# Scripts et fichiers d'automatisation hôte
+build.sh
+Makefile
+Makefile.bak
+
+# Fonctions Fission (gérées et exécutées indépendamment par Fission)
+functions/
+
+# Binaires locaux et caches de compilation
+bin/
+frontend
+*.exe
+*.test
+*.out
+
+# Fichiers de sauvegarde et temporaires
+*.bak
+*.tmp
+*.swp
+*~
+
+# Fichiers système
+.DS_Store
+Thumbs.db

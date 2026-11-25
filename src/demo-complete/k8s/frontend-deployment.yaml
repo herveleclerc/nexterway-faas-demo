@@ -27,7 +27,7 @@ spec:
             - name: PORT
               value: "8080"
             - name: FISSION_ROUTER_URL
-              value: "http://router.fission"
+              value: "http://router.fission.svc.cluster.local"
             - name: TENANT_HOST
               value: "wy-3a1fd37f-1-0-0.nexterway.caas.fr"
           resources:

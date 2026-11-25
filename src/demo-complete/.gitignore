@@ -1,0 +1,25 @@
+# Binaires et répertoires de compilation Go
+bin/
+frontend
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Fichiers de sauvegarde et temporaires
+*.bak
+*.tmp
+*.swp
+*~
+
+# Fichiers système et IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Fichiers d'environnement local
+.env
+.env.local

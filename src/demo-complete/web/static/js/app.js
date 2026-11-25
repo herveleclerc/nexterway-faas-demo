@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const taskForm = document.getElementById("taskForm");
     const refreshBtn = document.getElementById("refreshBtn");
     const autoRefreshToggle = document.getElementById("autoRefreshToggle");
+    const pgIndicator = document.getElementById("pgIndicator");
+    const pgStatusText = document.getElementById("pgStatusText");
 
     let isAutoRefresh = true;
     let pollInterval = null;
@@ -15,15 +17,50 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadTasks() {
         try {
             const res = await fetch("/api/tasks");
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const json = await res.json();
+            const json = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                const errorMsg = json.message || `Erreur HTTP ${res.status}`;
+                throw new Error(errorMsg);
+            }
+
+            // Statut connecté
+            if (pgIndicator && pgStatusText) {
+                pgIndicator.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+                pgStatusText.innerHTML = "Fission &amp; PG : <strong>Connecté</strong>";
+            }
 
             updateStats(json.stats || {});
             renderTasks(json.data || []);
         } catch (err) {
             console.error("Erreur chargement tâches:", err);
-            showToast("Erreur lors de la récupération des tâches", "error");
+
+            // Statut erreur visible
+            if (pgIndicator && pgStatusText) {
+                pgIndicator.className = "w-2 h-2 rounded-full bg-rose-500";
+                pgStatusText.innerHTML = "Fission / PG : <strong class='text-rose-600'>Erreur</strong>";
+            }
+
+            renderError(err.message);
+            showToast(err.message, "error");
         }
+    }
+
+    function renderError(message) {
+        if (!taskTableBody) return;
+        taskTableBody.innerHTML = `
+            <tr>
+                <td colspan="6" class="px-6 py-8 text-center text-sm">
+                    <div class="inline-flex items-center justify-center p-3 bg-rose-50 text-rose-700 rounded-xl border border-rose-200 mb-2">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span class="font-medium">${escapeHtml(message)}</span>
+                    </div>
+                    <p class="text-xs text-slate-500">Vérifiez les logs du frontend avec : <code>kubectl logs -l app.kubernetes.io/name=demo-frontend</code></p>
+                </td>
+            </tr>
+        `;
     }
 
     function updateStats(stats) {
@@ -95,7 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 method: "POST",
                 headers: { "Content-Type": "application/json" }
             });
-            const json = await res.json();
+            const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json.message || "Erreur de traitement");
 
             showToast("Tâche traitée par Fission et mise à jour dans PostgreSQL !", "success");
@@ -124,7 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
-                const json = await res.json();
+                const json = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(json.message || "Erreur création");
 
                 showToast("Nouvelle tâche insérée dans PostgreSQL via Fission", "success");
