@@ -63,9 +63,12 @@ func buildCandidateDSNs() []string {
 		if strings.Contains(envDBURL, "pg-cluster") {
 			candidates = append(candidates,
 				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw"),
+				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.default.svc.cluster.local"),
 				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.demo-fission-1.svc.cluster.local"),
 				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.wy-3a1fd37f-1-0-0.svc.cluster.local"),
+				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.postgres.svc.cluster.local"),
 				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-demo-rw.demo-fission-1.svc.cluster.local"),
+				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-demo-rw.default.svc.cluster.local"),
 			)
 		}
 	}
@@ -80,9 +83,12 @@ func buildCandidateDSNs() []string {
 	// 3. Fallbacks standards pour CloudNativePG (services -rw créés par l'opérateur)
 	fallbackHosts := []string{
 		"pg-demo-rw.demo-fission-1.svc.cluster.local",
+		"pg-demo-rw.default.svc.cluster.local",
 		"pg-demo-rw",
+		"pg-cluster-rw.default.svc.cluster.local",
 		"pg-cluster-rw.demo-fission-1.svc.cluster.local",
 		"pg-cluster-rw.wy-3a1fd37f-1-0-0.svc.cluster.local",
+		"pg-cluster-rw.postgres.svc.cluster.local",
 		"pg-cluster-rw",
 	}
 
@@ -111,17 +117,14 @@ func initDB() (*sql.DB, error) {
 	}
 
 	candidates := buildCandidateDSNs()
-	var lastErr error
-	var attempted []string
+	var errorReports []string
 
 	for _, dsn := range candidates {
-		// Masquage du mot de passe pour les logs
 		displayDSN := maskDSN(dsn)
-		attempted = append(attempted, displayDSN)
 
 		database, err := sql.Open("postgres", dsn)
 		if err != nil {
-			lastErr = err
+			errorReports = append(errorReports, fmt.Sprintf("[%s] open err: %v", displayDSN, err))
 			continue
 		}
 
@@ -131,7 +134,7 @@ func initDB() (*sql.DB, error) {
 
 		if err := database.Ping(); err != nil {
 			_ = database.Close()
-			lastErr = err
+			errorReports = append(errorReports, fmt.Sprintf("[%s] ping err: %v", displayDSN, err))
 			continue
 		}
 
@@ -161,8 +164,8 @@ func initDB() (*sql.DB, error) {
 		return db, nil
 	}
 
-	return nil, fmt.Errorf("aucune cible PostgreSQL joignable (Dernière erreur: %v). Cibles testées : %s",
-		lastErr, strings.Join(attempted, " | "))
+	return nil, fmt.Errorf("aucune cible PostgreSQL joignable. Détails par cible : %s",
+		strings.Join(errorReports, " | "))
 }
 
 func maskDSN(dsn string) string {
