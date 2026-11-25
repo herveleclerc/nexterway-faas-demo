@@ -1,6 +1,6 @@
 # Binaires et répertoires de compilation Go
 bin/
-frontend
+/frontend
 *.exe
 *.exe~
 *.dll
