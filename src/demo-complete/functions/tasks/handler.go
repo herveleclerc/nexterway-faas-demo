@@ -14,9 +14,70 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-
-	"github.com/herveleclerc/nexterway-faas-demo/src/demo-complete/pkg/models"
 )
+
+// TaskStatus représente l'état d'avancement d'une tâche
+type TaskStatus string
+
+const (
+	StatusPending    TaskStatus = "PENDING"
+	StatusProcessing TaskStatus = "PROCESSING"
+	StatusCompleted  TaskStatus = "COMPLETED"
+	StatusFailed     TaskStatus = "FAILED"
+)
+
+// TaskPriority définit le niveau de priorité
+type TaskPriority string
+
+const (
+	PriorityLow    TaskPriority = "LOW"
+	PriorityMedium TaskPriority = "MEDIUM"
+	PriorityHigh   TaskPriority = "HIGH"
+	PriorityUrgent TaskPriority = "URGENT"
+)
+
+// Task est l'entité stockée dans la base PostgreSQL CloudNativePG
+type Task struct {
+	ID          string          `json:"id"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Priority    TaskPriority    `json:"priority"`
+	Status      TaskStatus      `json:"status"`
+	Result      json.RawMessage `json:"result,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+// CreateTaskRequest est le payload envoyé pour créer une tâche
+type CreateTaskRequest struct {
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	Priority    TaskPriority `json:"priority"`
+}
+
+// ProcessTaskRequest est le payload optionnel pour déclencher un traitement
+type ProcessTaskRequest struct {
+	WorkerID string `json:"worker_id,omitempty"`
+	Notes    string `json:"notes,omitempty"`
+}
+
+// TaskStats regroupe les compteurs d'état pour le dashboard
+type TaskStats struct {
+	Total      int `json:"total"`
+	Pending    int `json:"pending"`
+	Processing int `json:"processing"`
+	Completed  int `json:"completed"`
+	Failed     int `json:"failed"`
+}
+
+// TasksResponse est le format standard retourné par la fonction
+type TasksResponse struct {
+	Status  string     `json:"status"`
+	Message string     `json:"message,omitempty"`
+	Stats   *TaskStats `json:"stats,omitempty"`
+	Data    any        `json:"data,omitempty"`
+	PodName string     `json:"pod_name,omitempty"`
+}
 
 var (
 	db   *sql.DB
@@ -169,7 +230,6 @@ func initDB() (*sql.DB, error) {
 }
 
 func maskDSN(dsn string) string {
-	// Masque le password pour éviter d'exposer des secrets dans les logs
 	if idx := strings.Index(dsn, "password="); idx != -1 {
 		end := strings.Index(dsn[idx:], " ")
 		if end != -1 {
@@ -194,7 +254,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	database, err := initDB()
 	if err != nil {
-		sendJSON(w, http.StatusServiceUnavailable, models.TasksResponse{
+		sendJSON(w, http.StatusServiceUnavailable, TasksResponse{
 			Status:  "error",
 			Message: fmt.Sprintf("Connexion PostgreSQL indisponible : %v", err),
 			PodName: os.Getenv("HOSTNAME"),
@@ -216,7 +276,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		handleCreateTask(w, r, database)
 
 	default:
-		sendJSON(w, http.StatusMethodNotAllowed, models.TasksResponse{
+		sendJSON(w, http.StatusMethodNotAllowed, TasksResponse{
 			Status:  "error",
 			Message: fmt.Sprintf("Méthode %s non supportée", r.Method),
 		})
@@ -231,7 +291,7 @@ func handleListTasks(w http.ResponseWriter, db *sql.DB) {
 		LIMIT 100
 	`)
 	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, models.TasksResponse{
+		sendJSON(w, http.StatusInternalServerError, TasksResponse{
 			Status:  "error",
 			Message: fmt.Sprintf("Erreur lecture tâches: %v", err),
 		})
@@ -239,11 +299,11 @@ func handleListTasks(w http.ResponseWriter, db *sql.DB) {
 	}
 	defer rows.Close()
 
-	tasks := make([]models.Task, 0)
-	stats := &models.TaskStats{}
+	tasks := make([]Task, 0)
+	stats := &TaskStats{}
 
 	for rows.Next() {
-		var t models.Task
+		var t Task
 		var rawResult []byte
 		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &t.Priority, &t.Status, &rawResult, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			log.Printf("Erreur scan: %v", err)
@@ -254,18 +314,18 @@ func handleListTasks(w http.ResponseWriter, db *sql.DB) {
 
 		stats.Total++
 		switch t.Status {
-		case models.StatusPending:
+		case StatusPending:
 			stats.Pending++
-		case models.StatusProcessing:
+		case StatusProcessing:
 			stats.Processing++
-		case models.StatusCompleted:
+		case StatusCompleted:
 			stats.Completed++
-		case models.StatusFailed:
+		case StatusFailed:
 			stats.Failed++
 		}
 	}
 
-	sendJSON(w, http.StatusOK, models.TasksResponse{
+	sendJSON(w, http.StatusOK, TasksResponse{
 		Status:  "success",
 		Stats:   stats,
 		Data:    tasks,
@@ -274,9 +334,9 @@ func handleListTasks(w http.ResponseWriter, db *sql.DB) {
 }
 
 func handleCreateTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	var req models.CreateTaskRequest
+	var req CreateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendJSON(w, http.StatusBadRequest, models.TasksResponse{
+		sendJSON(w, http.StatusBadRequest, TasksResponse{
 			Status:  "error",
 			Message: "Payload JSON invalide",
 		})
@@ -284,7 +344,7 @@ func handleCreateTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	if strings.TrimSpace(req.Title) == "" {
-		sendJSON(w, http.StatusBadRequest, models.TasksResponse{
+		sendJSON(w, http.StatusBadRequest, TasksResponse{
 			Status:  "error",
 			Message: "Le champ 'title' est obligatoire",
 		})
@@ -292,15 +352,15 @@ func handleCreateTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	if req.Priority == "" {
-		req.Priority = models.PriorityMedium
+		req.Priority = PriorityMedium
 	}
 
-	task := models.Task{
+	task := Task{
 		ID:          generateUUID(),
 		Title:       req.Title,
 		Description: req.Description,
 		Priority:    req.Priority,
-		Status:      models.StatusPending,
+		Status:      StatusPending,
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),
 	}
@@ -310,14 +370,14 @@ func handleCreateTask(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, $6, $7)
 	`, task.ID, task.Title, task.Description, task.Priority, task.Status, task.CreatedAt, task.UpdatedAt)
 	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, models.TasksResponse{
+		sendJSON(w, http.StatusInternalServerError, TasksResponse{
 			Status:  "error",
 			Message: fmt.Sprintf("Erreur insertion PostgreSQL: %v", err),
 		})
 		return
 	}
 
-	sendJSON(w, http.StatusCreated, models.TasksResponse{
+	sendJSON(w, http.StatusCreated, TasksResponse{
 		Status:  "success",
 		Message: "Tâche créée avec succès dans PostgreSQL",
 		Data:    task,
@@ -333,7 +393,7 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 	}
 
 	if taskID == "" {
-		sendJSON(w, http.StatusBadRequest, models.TasksResponse{
+		sendJSON(w, http.StatusBadRequest, TasksResponse{
 			Status:  "error",
 			Message: "Identifiant de tâche 'id' manquant",
 		})
@@ -344,9 +404,9 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 		UPDATE tasks
 		SET status = $1, updated_at = $2
 		WHERE id = $3 AND status = $4
-	`, models.StatusProcessing, time.Now().UTC(), taskID, models.StatusPending)
+	`, StatusProcessing, time.Now().UTC(), taskID, StatusPending)
 	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, models.TasksResponse{
+		sendJSON(w, http.StatusInternalServerError, TasksResponse{
 			Status:  "error",
 			Message: fmt.Sprintf("Erreur mise à jour statut: %v", err),
 		})
@@ -355,7 +415,7 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 
 	rowsAffected, _ := res.RowsAffected()
 	if rowsAffected == 0 {
-		sendJSON(w, http.StatusConflict, models.TasksResponse{
+		sendJSON(w, http.StatusConflict, TasksResponse{
 			Status:  "error",
 			Message: "Tâche introuvable ou déjà traitée",
 		})
@@ -383,16 +443,16 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 		UPDATE tasks
 		SET status = $1, result = $2, updated_at = $3
 		WHERE id = $4
-	`, models.StatusCompleted, resultBytes, time.Now().UTC(), taskID)
+	`, StatusCompleted, resultBytes, time.Now().UTC(), taskID)
 	if err != nil {
-		sendJSON(w, http.StatusInternalServerError, models.TasksResponse{
+		sendJSON(w, http.StatusInternalServerError, TasksResponse{
 			Status:  "error",
 			Message: fmt.Sprintf("Erreur sauvegarde résultat PostgreSQL: %v", err),
 		})
 		return
 	}
 
-	sendJSON(w, http.StatusOK, models.TasksResponse{
+	sendJSON(w, http.StatusOK, TasksResponse{
 		Status:  "success",
 		Message: fmt.Sprintf("Tâche %s exécutée et enregistrée avec succès", taskID),
 		Data:    resultPayload,
@@ -400,7 +460,7 @@ func handleProcessTask(w http.ResponseWriter, r *http.Request, db *sql.DB, taskI
 	})
 }
 
-func sendJSON(w http.ResponseWriter, code int, resp models.TasksResponse) {
+func sendJSON(w http.ResponseWriter, code int, resp TasksResponse) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(resp)
 }

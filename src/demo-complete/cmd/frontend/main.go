@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -130,6 +131,13 @@ func main() {
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		log.Printf("[PROXY] Fission Router a répondu: HTTP %d pour %s %s", resp.StatusCode, resp.Request.Method, resp.Request.URL.Path)
+		if resp.StatusCode >= 400 {
+			bodyBytes, err := io.ReadAll(resp.Body)
+			if err == nil {
+				log.Printf("[PROXY ERROR BODY] %s", string(bodyBytes))
+				resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
+		}
 		return nil
 	}
 
