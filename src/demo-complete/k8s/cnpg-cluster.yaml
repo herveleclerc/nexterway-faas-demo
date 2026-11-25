@@ -1,3 +1,15 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-demo-credentials
+  labels:
+    app.kubernetes.io/name: pg-demo
+    app.kubernetes.io/part-of: demo-complete
+type: kubernetes.io/basic-auth
+stringData:
+  username: tenant
+  password: sec42
+---
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -6,7 +18,7 @@ metadata:
     app.kubernetes.io/name: pg-demo
     app.kubernetes.io/part-of: demo-complete
 spec:
-  # 1 instance comme demandé pour l'environnement de démo
+  # 1 instance pour l'environnement de démo
   instances: 1
 
   # Stratégie de mise à jour des pods
@@ -16,11 +28,13 @@ spec:
   storage:
     size: 2Gi
 
-  # Initialisation automatique de la base et du schéma
+  # Initialisation 100% automatique et déclarative à la création du cluster
   bootstrap:
     initdb:
-      database: taskdb
-      owner: taskuser
+      database: db
+      owner: tenant
+      secret:
+        name: pg-demo-credentials
       postInitSQL:
         - |
           CREATE TABLE IF NOT EXISTS tasks (

@@ -107,6 +107,9 @@ func buildCandidateDSNs() []string {
 		user = "taskuser"
 	}
 	password := os.Getenv("DB_PASSWORD")
+	if password == "" {
+		password = "sec42"
+	}
 	dbname := os.Getenv("DB_NAME")
 	if dbname == "" {
 		dbname = "taskdb"
