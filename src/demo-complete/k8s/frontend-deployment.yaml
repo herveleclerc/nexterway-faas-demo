@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-frontend
+  labels:
+    app.kubernetes.io/name: demo-frontend
+    app.kubernetes.io/part-of: demo-complete
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo-frontend
+        app.kubernetes.io/part-of: demo-complete
+    spec:
+      containers:
+        - name: frontend
+          image: herveleclerc/demo-frontend:0.0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: FISSION_ROUTER_URL
+              value: "http://router.fission"
+            - name: TENANT_HOST
+              value: "wy-3a1fd37f-1-0-0.nexterway.caas.fr"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop:
+                - ALL

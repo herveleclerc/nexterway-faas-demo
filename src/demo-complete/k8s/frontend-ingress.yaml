@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-frontend
+  labels:
+    app.kubernetes.io/name: demo-frontend
+    app.kubernetes.io/part-of: demo-complete
+  annotations:
+    # Ajuster selon le contrôleur Ingress (HAProxy / Nginx) de votre cluster
+    haproxy.org/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: le
+spec:
+  ingressClassName: haproxy
+  rules:
+    - host: demo-tasks.nexterway.caas.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-frontend
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - demo-tasks.nexterway.caas.fr
+      secretName: demo-tasks.nexterway.caas.fr-tls

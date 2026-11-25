@@ -1,0 +1,40 @@
+apiVersion: fission.io/v1
+kind: Package
+metadata:
+  name: pkg-tasks-go
+spec:
+  environment:
+    name: go
+    namespace: default
+  source:
+    type: literal
+    literal: ""
+---
+apiVersion: fission.io/v1
+kind: Function
+metadata:
+  name: tasks-service
+spec:
+  environment:
+    name: go
+    namespace: default
+  package:
+    packageref:
+      name: pkg-tasks-go
+      namespace: default
+  # Injection des identifiants PostgreSQL générés automatiquement par CloudNativePG (Secret pg-demo-app)
+  secrets:
+    - name: pg-demo-app
+      namespace: default
+---
+apiVersion: fission.io/v1
+kind: HTTPTrigger
+metadata:
+  name: trigger-tasks
+spec:
+  host: ""
+  relativeurl: "/api/tasks"
+  method: "ANY"
+  functionref:
+    type: name
+    name: tasks-service

@@ -1,0 +1,37 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-demo
+  labels:
+    app.kubernetes.io/name: pg-demo
+    app.kubernetes.io/part-of: demo-complete
+spec:
+  # 1 instance comme demandé pour l'environnement de démo
+  instances: 1
+
+  # Stratégie de mise à jour des pods
+  primaryUpdateStrategy: unsupervised
+
+  # Stockage persistant PVC
+  storage:
+    size: 2Gi
+
+  # Initialisation automatique de la base et du schéma
+  bootstrap:
+    initdb:
+      database: taskdb
+      owner: taskuser
+      postInitSQL:
+        - |
+          CREATE TABLE IF NOT EXISTS tasks (
+              id VARCHAR(36) PRIMARY KEY,
+              title VARCHAR(255) NOT NULL,
+              description TEXT,
+              priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+              status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+              result JSONB,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+          CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);

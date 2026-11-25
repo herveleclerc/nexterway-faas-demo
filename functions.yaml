@@ -59,3 +59,11 @@ functions:
     method: POST
     timeout: 30
     file: src/python/odoo_contact.py
+
+  # ── Démo Complète : Service de tâches connecté à CloudNativePG ──────────────
+  - name: tasks-service
+    runtime: go
+    path: /api/tasks
+    method: ANY
+    timeout: 30
+    file: src/demo-complete/functions/tasks/handler.go
