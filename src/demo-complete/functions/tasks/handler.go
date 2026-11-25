@@ -168,13 +168,9 @@ func initDB() (*sql.DB, error) {
 	dbMu.Lock()
 	defer dbMu.Unlock()
 
-	// Si déjà connecté et actif
+	// Si déjà connecté, on réutilise le pool thread-safe existant (évite les blocages Ping)
 	if db != nil {
-		if err := db.Ping(); err == nil {
-			return db, nil
-		}
-		_ = db.Close()
-		db = nil
+		return db, nil
 	}
 
 	candidates := buildCandidateDSNs()

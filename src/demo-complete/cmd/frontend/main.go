@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -108,6 +109,21 @@ func main() {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(parsedRouterURL)
+
+	// Transport optimisé pour Kubernetes : évite la réutilisation de connexions TCP
+	// fermées prématurément par le routeur Fission ou kube-proxy (cause des 502 intermittents)
+	proxy.Transport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 0,
+		}).DialContext,
+		DisableKeepAlives:     true,
+		ForceAttemptHTTP2:     false,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
