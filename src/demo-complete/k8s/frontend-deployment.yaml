@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: herveleclerc/demo-frontend:0.0.6
+          image: herveleclerc/demo-frontend:v1.0.5
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

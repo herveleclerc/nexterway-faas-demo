@@ -104,7 +104,7 @@ func buildCandidateDSNs() []string {
 	}
 	user := os.Getenv("DB_USER")
 	if user == "" {
-		user = "taskuser"
+		user = "tenant"
 	}
 	password := os.Getenv("DB_PASSWORD")
 	if password == "" {
@@ -112,53 +112,63 @@ func buildCandidateDSNs() []string {
 	}
 	dbname := os.Getenv("DB_NAME")
 	if dbname == "" {
-		dbname = "taskdb"
+		dbname = "db"
 	}
 	sslmode := os.Getenv("DB_SSLMODE")
 	if sslmode == "" {
 		sslmode = "prefer"
 	}
 
-	// 1. Si DATABASE_URL est fournie
-	if envDBURL != "" {
-		candidates = append(candidates, envDBURL)
-
-		// Si DATABASE_URL contient "pg-cluster", CloudNativePG crée en réalité le service <cluster>-rw
-		if strings.Contains(envDBURL, "pg-cluster") {
-			candidates = append(candidates,
-				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw"),
-				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.default.svc.cluster.local"),
-				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.demo-fission-1.svc.cluster.local"),
-				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.wy-3a1fd37f-1-0-0.svc.cluster.local"),
-				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-cluster-rw.postgres.svc.cluster.local"),
-				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-demo-rw.demo-fission-1.svc.cluster.local"),
-				strings.ReplaceAll(envDBURL, "pg-cluster", "pg-demo-rw.default.svc.cluster.local"),
-			)
-		}
-	}
+	// 1. Cible principale et directe dans le cluster K8s (CloudNativePG dans demo-fission-1)
+	// Doit TOUJOURS être tentée en premier pour éviter les timeouts DNS
+	primaryDSN := fmt.Sprintf("host=pg-demo-rw.demo-fission-1.svc.cluster.local port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=2",
+		port, user, password, dbname, sslmode)
+	candidates = append(candidates, primaryDSN)
 
 	// 2. Si DB_HOST est explicitement spécifié
 	if explicitHost := os.Getenv("DB_HOST"); explicitHost != "" {
-		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=3",
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=2",
 			explicitHost, port, user, password, dbname, sslmode)
 		candidates = append([]string{dsn}, candidates...)
 	}
 
-	// 3. Fallbacks standards pour CloudNativePG (services -rw créés par l'opérateur)
+	// 3. Si DATABASE_URL est fournie
+	if envDBURL != "" {
+		// Traduction immédiate si l'URL pointe vers le placeholder 'pg-cluster'
+		if strings.Contains(envDBURL, "pg-cluster") {
+			translated := strings.ReplaceAll(envDBURL, "pg-cluster", "pg-demo-rw.demo-fission-1.svc.cluster.local")
+			if !strings.Contains(translated, "connect_timeout") {
+				if strings.Contains(translated, "?") {
+					translated += "&connect_timeout=2"
+				} else {
+					translated += "?connect_timeout=2"
+				}
+			}
+			candidates = append(candidates, translated)
+		}
+
+		// URL brute mais avec timeout strict pour ne jamais geler l'exécuteur
+		urlWithTimeout := envDBURL
+		if !strings.Contains(urlWithTimeout, "connect_timeout") {
+			if strings.Contains(urlWithTimeout, "?") {
+				urlWithTimeout += "&connect_timeout=2"
+			} else {
+				urlWithTimeout += "?connect_timeout=2"
+			}
+		}
+		candidates = append(candidates, urlWithTimeout)
+	}
+
+	// 4. Fallbacks K8s locaux
 	fallbackHosts := []string{
-		"pg-demo-rw.demo-fission-1.svc.cluster.local",
-		"pg-demo-rw.default.svc.cluster.local",
 		"pg-demo-rw",
-		"pg-cluster-rw.default.svc.cluster.local",
+		"pg-demo-rw.default.svc.cluster.local",
 		"pg-cluster-rw.demo-fission-1.svc.cluster.local",
-		"pg-cluster-rw.wy-3a1fd37f-1-0-0.svc.cluster.local",
-		"pg-cluster-rw.postgres.svc.cluster.local",
-		"pg-cluster-rw",
 	}
 
 	for _, h := range fallbackHosts {
 		candidates = append(candidates, fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=3",
+			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=2",
 			h, port, user, password, dbname, sslmode,
 		))
 	}

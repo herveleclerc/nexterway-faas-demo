@@ -14,8 +14,11 @@ document.addEventListener("DOMContentLoaded", () => {
     let isAutoRefresh = true;
     let pollInterval = null;
     let hasLoadedOnce = false;
+    let isFetching = false;
 
     async function loadTasks() {
+        if (isFetching) return;
+        isFetching = true;
         try {
             const res = await fetch("/api/tasks");
             const json = await res.json().catch(() => ({}));
@@ -51,8 +54,9 @@ document.addEventListener("DOMContentLoaded", () => {
             // N'écrase pas le tableau si des tâches sont déjà visibles
             if (!hasLoadedOnce) {
                 renderError(err.message);
-                showToast(err.message, "error");
             }
+        } finally {
+            isFetching = false;
         }
     }
 
@@ -203,7 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function togglePolling() {
         if (pollInterval) clearInterval(pollInterval);
         if (isAutoRefresh) {
-            pollInterval = setInterval(loadTasks, 5000);
+            pollInterval = setInterval(loadTasks, 6000);
         }
     }
 
