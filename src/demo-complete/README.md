@@ -217,3 +217,10 @@ kubectl get cluster.postgresql.cnpg.io -n demo-fission-1
 # Statut des pods applicatifs
 kubectl get pods -n demo-fission-1
 ```
+
+
+## 7 Nettoyage 
+
+```bash
+kubectl exec -n demo-fission-1 -c postgres pg-demo-1 -- psql -U postgres -d db -c "TRUNCATE TABLE tasks;"
+```
