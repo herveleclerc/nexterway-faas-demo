@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let isAutoRefresh = true;
     let pollInterval = null;
+    let hasLoadedOnce = false;
 
     async function loadTasks() {
         try {
@@ -30,19 +31,28 @@ document.addEventListener("DOMContentLoaded", () => {
                 pgStatusText.innerHTML = "Fission &amp; PG : <strong>Connecté</strong>";
             }
 
+            hasLoadedOnce = true;
             updateStats(json.stats || {});
             renderTasks(json.data || []);
         } catch (err) {
             console.error("Erreur chargement tâches:", err);
 
-            // Statut erreur visible
+            // Statut reconnexion sans effrayer l'utilisateur si les tâches sont déjà affichées
             if (pgIndicator && pgStatusText) {
-                pgIndicator.className = "w-2 h-2 rounded-full bg-rose-500";
-                pgStatusText.innerHTML = "Fission / PG : <strong class='text-rose-600'>Erreur</strong>";
+                if (hasLoadedOnce) {
+                    pgIndicator.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+                    pgStatusText.innerHTML = "Fission / PG : <strong class='text-amber-600'>Reconnexion...</strong>";
+                } else {
+                    pgIndicator.className = "w-2 h-2 rounded-full bg-rose-500";
+                    pgStatusText.innerHTML = "Fission / PG : <strong class='text-rose-600'>Erreur</strong>";
+                }
             }
 
-            renderError(err.message);
-            showToast(err.message, "error");
+            // N'écrase pas le tableau si des tâches sont déjà visibles
+            if (!hasLoadedOnce) {
+                renderError(err.message);
+                showToast(err.message, "error");
+            }
         }
     }
 
@@ -193,7 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function togglePolling() {
         if (pollInterval) clearInterval(pollInterval);
         if (isAutoRefresh) {
-            pollInterval = setInterval(loadTasks, 4000);
+            pollInterval = setInterval(loadTasks, 5000);
         }
     }
 
